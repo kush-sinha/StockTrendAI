@@ -183,10 +183,4 @@ joblib
 
 StockTrendAI successfully proves that ML can be effectively applied to real-world stock market forecasting — combining **price prediction, directional trend classification** and an interactive dashboard into one complete and practical solution for financial decision-making. This project is a **complete end-to-end AI platform** that is simple, fast and accessible for everyone — regardless of technical background.
 
----
-
----
-
-
----
 ⭐ **If you found this project helpful, please give it a star!** ⭐
