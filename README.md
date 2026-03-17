@@ -130,10 +130,7 @@ StockTrendAI/
 │   └── app.py                     
 │
 ├── 📁 models/
-│   └── best_model.pkl            
-│
-└── 📁 assets/
-    └── dashboard_preview.png     
+│   └── best_model.pkl          
 ```
 
 ---
