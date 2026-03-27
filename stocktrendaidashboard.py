@@ -10,6 +10,9 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, R
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, classification_report
 from sklearn.utils.class_weight import compute_sample_weight
+import hashlib
+import json
+from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -22,6 +25,221 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ─────────────────────────────────────────────
+# AUTHENTICATION HELPERS
+# ─────────────────────────────────────────────
+USERS_FILE = Path(__file__).with_name("users.json")
+REMEMBER_FILE = Path(__file__).with_name("remember_me.json")
+
+def _password_hash(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+def _normalize_answer(answer: str) -> str:
+    return answer.strip().lower()
+
+def _load_users() -> dict:
+    if not USERS_FILE.exists():
+        return {}
+    try:
+        with USERS_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            normalized = {}
+            for username, record in data.items():
+                # Backward compatibility:
+                # - old format: {"user": "password_hash"}
+                # - role format: {"user": {"password_hash": "...", "role": "...", ...}}
+                if isinstance(record, str):
+                    normalized[username] = {
+                        "password_hash": record,
+                        "security_question": "",
+                        "security_answer_hash": ""
+                    }
+                elif isinstance(record, dict):
+                    normalized[username] = {
+                        "password_hash": record.get("password_hash", ""),
+                        "security_question": record.get("security_question", ""),
+                        "security_answer_hash": record.get("security_answer_hash", "")
+                    }
+            return normalized
+    except Exception:
+        pass
+    return {}
+
+def _save_users(users: dict) -> None:
+    with USERS_FILE.open("w", encoding="utf-8") as f:
+        json.dump(users, f, indent=2)
+
+def _load_remembered_user() -> str:
+    if not REMEMBER_FILE.exists():
+        return ""
+    try:
+        with REMEMBER_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return str(data.get("username", "")).strip()
+    except Exception:
+        pass
+    return ""
+
+def _save_remembered_user(username: str) -> None:
+    with REMEMBER_FILE.open("w", encoding="utf-8") as f:
+        json.dump({"username": username}, f, indent=2)
+
+def _clear_remembered_user() -> None:
+    try:
+        if REMEMBER_FILE.exists():
+            REMEMBER_FILE.unlink()
+    except Exception:
+        pass
+
+def _is_password_strong(password: str):
+    checks = [
+        (len(password) >= 8, "at least 8 characters"),
+        (any(ch.isupper() for ch in password), "an uppercase letter"),
+        (any(ch.islower() for ch in password), "a lowercase letter"),
+        (any(ch.isdigit() for ch in password), "a number"),
+        (any(not ch.isalnum() for ch in password), "a symbol (e.g. @, #, !)"),
+    ]
+    missing = [rule for ok, rule in checks if not ok]
+    return len(missing) == 0, missing
+
+def _init_auth_state() -> None:
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "current_user" not in st.session_state:
+        st.session_state.current_user = ""
+    if "auth_view" not in st.session_state:
+        st.session_state.auth_view = "login"
+    users = _load_users()
+    if not users and not st.session_state.logged_in:
+        st.session_state.auth_view = "register"
+    if not st.session_state.logged_in:
+        remembered_user = _load_remembered_user()
+        if remembered_user and remembered_user in users:
+            st.session_state.logged_in = True
+            st.session_state.current_user = remembered_user
+
+def _render_auth_screen() -> None:
+    st.title("🔐 StockTrendAI Authentication")
+    st.markdown(
+        '<p class="page-subtitle">Register/Login required before accessing dashboard features</p>',
+        unsafe_allow_html=True
+    )
+
+    if st.session_state.auth_view == "login":
+        st.markdown("### Login")
+        with st.form("login_form", clear_on_submit=False):
+            login_user = st.text_input("Username", key="login_username")
+            login_pass = st.text_input("Password", type="password", key="login_password")
+            remember_me = st.checkbox("Remember me on this device")
+            login_submit = st.form_submit_button("Login")
+            if login_submit:
+                users = _load_users()
+                if login_user in users and users[login_user].get("password_hash") == _password_hash(login_pass):
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = login_user
+                    if remember_me:
+                        _save_remembered_user(login_user)
+                    else:
+                        _clear_remembered_user()
+                    st.success("Login successful.")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+
+        st.markdown("Not registered yet?")
+        if st.button("Go to Register"):
+            st.session_state.auth_view = "register"
+            st.rerun()
+        if st.button("Forgot Password?"):
+            st.session_state.auth_view = "forgot"
+            st.rerun()
+
+    elif st.session_state.auth_view == "register":
+        st.markdown("### Register")
+        with st.form("register_form", clear_on_submit=True):
+            new_user = st.text_input("Create Username", key="register_username")
+            new_pass = st.text_input("Create Password", type="password", key="register_password")
+            confirm_pass = st.text_input("Confirm Password", type="password", key="register_confirm")
+            security_question = st.selectbox(
+                "Security Question (for password reset)",
+                [
+                    "What is your favorite color?",
+                    "What is your birth city?",
+                    "What is your favorite food?",
+                ],
+            )
+            security_answer = st.text_input("Security Answer", key="register_security_answer")
+            users = _load_users()
+            register_submit = st.form_submit_button("Register")
+            if register_submit:
+                if len(new_user.strip()) < 3:
+                    st.error("Username must be at least 3 characters.")
+                elif not security_answer.strip():
+                    st.error("Security answer is required.")
+                elif new_pass != confirm_pass:
+                    st.error("Passwords do not match.")
+                elif new_user in users:
+                    st.error("Username already exists.")
+                else:
+                    strong, missing_rules = _is_password_strong(new_pass)
+                    if not strong:
+                        st.error("Password is weak. It must include: " + ", ".join(missing_rules) + ".")
+                        st.stop()
+                    users[new_user] = {
+                        "password_hash": _password_hash(new_pass),
+                        "security_question": security_question.strip(),
+                        "security_answer_hash": _password_hash(_normalize_answer(security_answer))
+                    }
+                    _save_users(users)
+                    st.success("Registration successful. Please log in now.")
+                    st.session_state.auth_view = "login"
+                    st.rerun()
+
+        if st.button("Back to Login"):
+            st.session_state.auth_view = "login"
+            st.rerun()
+
+    else:
+        st.markdown("### Forgot Password")
+        with st.form("forgot_form", clear_on_submit=False):
+            fp_user = st.text_input("Username", key="forgot_username")
+            users = _load_users()
+            record = users.get(fp_user, {})
+            question = record.get("security_question", "")
+            if question:
+                st.info(f"Security Question: {question}")
+            fp_answer = st.text_input("Security Answer", key="forgot_answer")
+            fp_new_pass = st.text_input("New Password", type="password", key="forgot_new_pass")
+            fp_confirm_pass = st.text_input("Confirm New Password", type="password", key="forgot_confirm_pass")
+            forgot_submit = st.form_submit_button("Reset Password")
+            if forgot_submit:
+                if fp_user not in users:
+                    st.error("Username not found.")
+                elif not users[fp_user].get("security_question"):
+                    st.error("Password reset is not configured for this account.")
+                elif users[fp_user].get("security_answer_hash") != _password_hash(_normalize_answer(fp_answer)):
+                    st.error("Security answer is incorrect.")
+                elif fp_new_pass != fp_confirm_pass:
+                    st.error("Passwords do not match.")
+                else:
+                    strong, missing_rules = _is_password_strong(fp_new_pass)
+                    if not strong:
+                        st.error("Password is weak. It must include: " + ", ".join(missing_rules) + ".")
+                        st.stop()
+                    users[fp_user]["password_hash"] = _password_hash(fp_new_pass)
+                    _save_users(users)
+                    st.success("Password reset successful. Please log in.")
+                    st.session_state.auth_view = "login"
+                    st.rerun()
+
+        if st.button("Back to Login"):
+            st.session_state.auth_view = "login"
+            st.rerun()
+
+_init_auth_state()
 
 # ─────────────────────────────────────────────
 # GLOBAL PLOTLY THEME
@@ -123,8 +341,25 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid rgba(56,189,248,0.15) !important;
 }
 
-section[data-testid="stSidebar"] * {
+/* Don't apply DM Sans to icon ligatures (fixes "keyboard_double_arrow_left" text) */
+section[data-testid="stSidebar"] :not(.material-icons):not([data-testid="stIconMaterial"]):not(svg):not(path) {
     font-family: 'DM Sans', sans-serif !important;
+}
+
+/* Ensure Material icons keep their icon font */
+.material-icons,
+[data-testid="stIconMaterial"] {
+    font-family: 'Material Icons' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
+    -webkit-font-feature-settings: 'liga' !important;
+    -webkit-font-smoothing: antialiased !important;
 }
 
 [data-testid="stSidebarUserContent"] label {
@@ -146,6 +381,41 @@ div[data-baseweb="select"] input {
     border: 1px solid rgba(56,189,248,0.2) !important;
     border-radius: 8px !important;
     color: #1e293b !important;
+}
+
+/* Sidebar "Select Stock & Date Range" form visibility */
+section[data-testid="stSidebar"] form {
+    background: rgba(250, 247, 242, 0.92) !important;
+    border: 1px solid rgba(56, 189, 248, 0.25) !important;
+    border-radius: 14px !important;
+    padding: 14px 14px 10px !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06) !important;
+}
+
+section[data-testid="stSidebar"] form label {
+    color: #0369a1 !important;
+    font-weight: 700 !important;
+}
+
+section[data-testid="stSidebar"] form input {
+    background: #ffffff !important;
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+    border-radius: 10px !important;
+}
+
+/* Make BaseWeb input wrappers white too (covers date picker inputs) */
+section[data-testid="stSidebar"] form [data-baseweb="input"] {
+    background: #ffffff !important;
+    border-radius: 10px !important;
+}
+
+section[data-testid="stSidebar"] form [data-baseweb="input"] input {
+    background: #ffffff !important;
+}
+
+section[data-testid="stSidebar"] form button {
+    width: 100% !important;
+    border-radius: 10px !important;
 }
 
 div[data-baseweb="select"] input { caret-color: transparent !important; }
@@ -284,6 +554,10 @@ label { color: #475569 !important; font-size: 0.9rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
+if not st.session_state.logged_in:
+    _render_auth_screen()
+    st.stop()
+
 # ─────────────────────────────────────────────
 # TITLE
 # ─────────────────────────────────────────────
@@ -308,6 +582,10 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown("---")
+    st.markdown(
+        f"<div style='color:#475569;font-size:0.82rem;text-align:center;'>Logged in as <strong>{st.session_state.current_user}</strong></div>",
+        unsafe_allow_html=True
+    )
 
     page = st.sidebar.selectbox(
         "Navigate",
@@ -315,17 +593,44 @@ with st.sidebar:
             "📥  Data Collection & Preprocessing",
             "🧹  Data Cleaning & Linear Forecasting",
             "🤖  Advanced Model Comparison",
-            "📊  Trend Analysis & Classification"
-        ]
+            "📊  Trend Analysis & Classification",
+        ],
     )
 
     st.markdown("<hr style='border-color:rgba(56,189,248,0.15);margin:16px 0;'>", unsafe_allow_html=True)
 
-    ticker = st.text_input("Ticker Symbol", "NVDA")
-    start_date = st.date_input("Start Date", pd.to_datetime("2019-01-01"))
-    end_date = st.date_input("End Date", pd.to_datetime("2024-12-31"))
+    st.markdown("#### 📌 Select Stock & Date Range")
+    with st.form("data_inputs_form", clear_on_submit=False):
+        ticker = st.text_input("Ticker Symbol", value=st.session_state.get("ticker", ""))
+        # Streamlit date inputs show a calendar picker.
+        # We keep them "empty" by only setting session state after user clicks Load Data.
+        start_date = st.date_input(
+            "Start Date",
+            value=st.session_state.get("start_date", None),
+        )
+        end_date = st.date_input(
+            "End Date",
+            value=st.session_state.get("end_date", None),
+        )
+        load_clicked = st.form_submit_button("Load Data")
+
+    if load_clicked:
+        t = ticker.strip().upper()
+        if not t:
+            st.warning("Please enter a ticker symbol.")
+        elif start_date is None or end_date is None:
+            st.warning("Please select both Start Date and End Date from the calendar.")
+        elif pd.to_datetime(end_date) <= pd.to_datetime(start_date):
+            st.warning("End Date must be after Start Date.")
+        else:
+            st.session_state["ticker"] = t
+            st.session_state["start_date"] = start_date
+            st.session_state["end_date"] = end_date
+            st.session_state["data_loaded"] = True
+            st.rerun()
 
     st.markdown("<hr style='border-color:rgba(56,189,248,0.15);margin:16px 0;'>", unsafe_allow_html=True)
+
     st.markdown("""
     <div style='color:#475569; font-size:0.72rem; text-align:center; line-height:1.8;'>
         Data sourced from Yahoo Finance<br>
@@ -334,25 +639,86 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("<hr style='border-color:rgba(56,189,248,0.15);margin:16px 0;'>", unsafe_allow_html=True)
+
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.current_user = ""
+        _clear_remembered_user()
+        st.rerun()
+
+if not st.session_state.get("data_loaded"):
+    st.info("Enter ticker + dates, then click **Load Data**.")
+    st.stop()
+
+ticker = st.session_state.get("ticker", "").strip().upper()
+start_date = st.session_state.get("start_date", None)
+end_date = st.session_state.get("end_date", None)
+
+if not ticker:
+    st.warning("Please enter a ticker symbol (example: NVDA, AAPL, TSLA).")
+    st.stop()
+
+if start_date is None or end_date is None:
+    st.warning("Please select Start Date and End Date, then click Load Data.")
+    st.stop()
+
+if pd.to_datetime(end_date) <= pd.to_datetime(start_date):
+    st.warning("End Date must be after Start Date.")
+    st.stop()
+
 # ─────────────────────────────────────────────
 # DATA LOADING & BASE PREPROCESSING
 # ─────────────────────────────────────────────
-@st.cache_data
+@st.cache_data(ttl=300, max_entries=10)
 def load_data(ticker, start, end):
-    stock = yf.Ticker(ticker)
-    raw_df = stock.history(start=start, end=end)
-    return raw_df
+    try:
+        # yfinance is picky about date types; normalize to YYYY-MM-DD strings.
+        start_ts = pd.to_datetime(start)
+        end_ts = pd.to_datetime(end)
+        # `yf.download` is generally more reliable than `Ticker().history`.
+        raw_df = yf.download(
+            ticker,
+            start=start_ts.strftime("%Y-%m-%d"),
+            end=end_ts.strftime("%Y-%m-%d"),
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+        )
+        # `yfinance` can sometimes return None on network/ticker errors.
+        if raw_df is None:
+            return pd.DataFrame()
+        # `yf.download` can return MultiIndex columns (e.g., ('Close','NVDA')).
+        # Flatten to standard OHLCV columns so the rest of the app works.
+        if isinstance(raw_df.columns, pd.MultiIndex):
+            # Prefer the price field level (Open/High/Low/Close/Adj Close/Volume)
+            raw_df.columns = raw_df.columns.get_level_values(0)
+        return raw_df
+    except Exception:
+        return pd.DataFrame()
 
 raw_df = load_data(ticker, start_date, end_date)
 
-if raw_df.empty:
-    st.error("⚠️ No data received. Check ticker symbol or internet connection.")
+required_cols = ["Open", "High", "Low", "Close", "Volume"]
+if raw_df is None or raw_df.empty:
+    st.error(
+        "⚠️ No data received from Yahoo Finance right now.\n"
+        f"Ticker: {ticker}\n"
+        f"Start: {start_date}\n"
+        f"End: {end_date}\n"
+        "Check your internet connection and try again (Load Data)."
+    )
     st.stop()
 
-df = raw_df[['Open','High','Low','Close','Volume']].copy()
-df['Adj Close'] = raw_df['Close']
-if 'Adj Close' in raw_df.columns:
-    df['Adj Close'] = raw_df['Adj Close']
+missing = [c for c in required_cols if c not in raw_df.columns]
+if missing:
+    st.error(f"⚠️ Yahoo Finance did not return required columns: {', '.join(missing)}")
+    st.stop()
+
+df = raw_df[required_cols].copy()
+df["Adj Close"] = raw_df["Close"]
+if "Adj Close" in raw_df.columns:
+    df["Adj Close"] = raw_df["Adj Close"]
 
 df.index = pd.to_datetime(df.index)
 df = df.sort_index()
