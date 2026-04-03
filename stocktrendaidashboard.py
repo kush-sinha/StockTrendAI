@@ -1675,8 +1675,8 @@ elif page == "📊  Trend Analysis & Classification":
                     <div style="color:#22c55e;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">{best_clf_acc:.2f}%</div>
                 </div>
                 <div style="background:rgba(129,140,248,0.08);border-radius:10px;padding:12px;">
-                    <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Macro F1-Score</div>
-                    <div style="color:#818cf8;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">{gb_fixed_f1:.2f}%</div>
+                    <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Improvement vs LR</div>
+                    <div style="color:#818cf8;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">{best_clf_acc - lin_naive_acc:.1f}%</div>
                 </div>
                 <div style="background:rgba(244,114,182,0.08);border-radius:10px;padding:12px;">
                     <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">7-Day Bias</div>
