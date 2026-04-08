@@ -27,7 +27,7 @@ StockTrendAI: A Stock Market forecasting model
 <img width="1452" height="904" alt="Screenshot 2026-03-15 130025" src="https://github.com/user-attachments/assets/997e90fe-1bab-4b4f-a735-0dfac0f9d815" />
 <img width="1417" height="679" alt="Screenshot 2026-03-15 130044" src="https://github.com/user-attachments/assets/29b18b10-08a9-4459-acf9-5ac50d559e67" />
 <img width="1475" height="829" alt="Screenshot 2026-03-15 130153" src="https://github.com/user-attachments/assets/09c28507-07e6-4314-95eb-8bdca62f3b38" />
-<img width="1890" height="993" alt="Screenshot 2026-03-15 130237" src="https://github.com/user-attachments/assets/fa26ea84-f408-46a8-a0b3-9eaf648298c3" />
+
 
 
 ---
