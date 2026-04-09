@@ -8,9 +8,8 @@ from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, classification_report, f1_score
-from sklearn.utils.class_weight import compute_sample_weight, compute_class_weight
-from imblearn.over_sampling import SMOTE   # ← NEW: for class imbalance fix
+from sklearn.metrics import mean_absolute_error, mean_squared_error, accuracy_score, classification_report
+from sklearn.utils.class_weight import compute_sample_weight
 import hashlib
 import json
 from pathlib import Path
@@ -48,6 +47,9 @@ def _load_users() -> dict:
         if isinstance(data, dict):
             normalized = {}
             for username, record in data.items():
+                # Backward compatibility:
+                # - old format: {"user": "password_hash"}
+                # - role format: {"user": {"password_hash": "...", "role": "...", ...}}
                 if isinstance(record, str):
                     normalized[username] = {
                         "password_hash": record,
@@ -262,6 +264,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
+/* ── Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 
 [data-testid="stAppViewContainer"] {
@@ -270,6 +273,7 @@ st.markdown("""
     color: #1e293b;
 }
 
+/* Animated grid background */
 [data-testid="stAppViewContainer"]::before {
     content: '';
     position: fixed;
@@ -300,6 +304,7 @@ st.markdown("""
     z-index: 1;
 }
 
+/* ── Header ── */
 header[data-testid="stHeader"] {
     background: rgba(250,247,242,0.85) !important;
     backdrop-filter: blur(20px);
@@ -330,15 +335,18 @@ h2, h3 {
     color: #1e293b !important;
 }
 
+/* ── Sidebar ── */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #FAF7F2 0%, #F0EAE0 100%) !important;
     border-right: 1px solid rgba(56,189,248,0.15) !important;
 }
 
+/* Don't apply DM Sans to icon ligatures (fixes "keyboard_double_arrow_left" text) */
 section[data-testid="stSidebar"] :not(.material-icons):not([data-testid="stIconMaterial"]):not(svg):not(path) {
     font-family: 'DM Sans', sans-serif !important;
 }
 
+/* Ensure Material icons keep their icon font */
 .material-icons,
 [data-testid="stIconMaterial"] {
     font-family: 'Material Icons' !important;
@@ -362,6 +370,7 @@ section[data-testid="stSidebar"] :not(.material-icons):not([data-testid="stIconM
     letter-spacing: 1.5px;
 }
 
+/* Fix for Selectbox (Removes the blinking vertical line/cursor) */
 div[data-baseweb="select"] input {
     caret-color: transparent !important;
     color: #1e293b !important;
@@ -374,6 +383,7 @@ div[data-baseweb="select"] input {
     color: #1e293b !important;
 }
 
+/* Sidebar "Select Stock & Date Range" form visibility */
 section[data-testid="stSidebar"] form {
     background: rgba(250, 247, 242, 0.92) !important;
     border: 1px solid rgba(56, 189, 248, 0.25) !important;
@@ -393,6 +403,7 @@ section[data-testid="stSidebar"] form input {
     border-radius: 10px !important;
 }
 
+/* Make BaseWeb input wrappers white too (covers date picker inputs) */
 section[data-testid="stSidebar"] form [data-baseweb="input"] {
     background: #ffffff !important;
     border-radius: 10px !important;
@@ -412,6 +423,7 @@ div[data-baseweb="select"] * { caret-color: transparent !important; }
 div[data-baseweb="select"] [contenteditable] { caret-color: transparent !important; }
 div[data-baseweb="popover"] input { caret-color: transparent !important; }
 
+/* ── Metric Cards ── */
 [data-testid="stMetric"] {
     background: linear-gradient(135deg, rgba(240,234,224,0.9) 0%, rgba(235,226,212,0.9) 100%) !important;
     border: 1px solid rgba(56,189,248,0.25) !important;
@@ -428,8 +440,9 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     box-shadow: 0 8px 32px rgba(56,189,248,0.15), inset 0 1px 0 rgba(56,189,248,0.2) !important;
 }
 
+/* ── Metric Cards ── */
 [data-testid="stMetricLabel"] {
-    color: #1e293b !important;
+    color: #1e293b !important;        /* was #64748b */
     font-size: 0.78rem !important;
     font-weight: 600 !important;
     text-transform: uppercase;
@@ -437,13 +450,14 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
 }
 
 [data-testid="stMetricValue"] {
-    color: #0369a1 !important;
+    color: #0369a1 !important;        /* was #38bdf8 — deeper sky blue */
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 1.45rem !important;
     font-weight: 500 !important;
 }
 [data-testid="stMetricDelta"] svg { display: none !important; }
 
+/* ── Dataframes ── */
 [data-testid="stDataFrame"] {
     border-radius: 12px !important;
     overflow: hidden !important;
@@ -451,6 +465,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     background: rgba(240,234,224,0.6) !important;
 }
 
+/* ── Section Cards ── */
 .section-card {
     background: linear-gradient(135deg, rgba(240,234,224,0.7) 0%, rgba(235,226,212,0.7) 100%);
     border: 1px solid rgba(56,189,248,0.15);
@@ -464,6 +479,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     border-left: 3px solid #38bdf8;
 }
 
+/* ── Tag Badges ── */
 .badge {
     display: inline-block;
     padding: 3px 10px;
@@ -478,6 +494,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
 .badge-blue { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
 .badge-purple { background: rgba(129,140,248,0.15); color: #818cf8; border: 1px solid rgba(129,140,248,0.3); }
 
+/* ── Divider ── */
 .glow-divider {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(56,189,248,0.4), transparent);
@@ -485,6 +502,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     border: none;
 }
 
+/* ── Page subtitle ── */
 .page-subtitle {
     text-align: center;
     color: #64748b;
@@ -494,6 +512,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     letter-spacing: 0.5px;
 }
 
+/* ── Info box ── */
 .info-box {
     background: rgba(56,189,248,0.06);
     border: 1px solid rgba(56,189,248,0.2);
@@ -504,6 +523,7 @@ div[data-baseweb="popover"] input { caret-color: transparent !important; }
     line-height: 1.6;
 }
 
+/* ── Download button ── */
 div.stDownloadButton > button {
     background: linear-gradient(90deg, #38bdf8, #6366f1) !important;
     color: white !important;
@@ -521,8 +541,10 @@ div.stDownloadButton > button:hover {
     transform: translateY(-2px) !important;
 }
 
+/* ── Slider ── */
 [data-testid="stSlider"] { padding: 0 4px; }
 
+/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #FAF7F2; }
 ::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 3px; }
@@ -580,6 +602,8 @@ with st.sidebar:
     st.markdown("#### 📌 Select Stock & Date Range")
     with st.form("data_inputs_form", clear_on_submit=False):
         ticker = st.text_input("Ticker Symbol", value=st.session_state.get("ticker", ""))
+        # Streamlit date inputs show a calendar picker.
+        # We keep them "empty" by only setting session state after user clicks Load Data.
         start_date = st.date_input(
             "Start Date",
             value=st.session_state.get("start_date", None),
@@ -617,7 +641,7 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color:rgba(56,189,248,0.15);margin:16px 0;'>", unsafe_allow_html=True)
 
-    if st.button("🚪 Logout", width="stretch"):
+    if st.button("🚪 Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.current_user = ""
         _clear_remembered_user()
@@ -649,8 +673,10 @@ if pd.to_datetime(end_date) <= pd.to_datetime(start_date):
 @st.cache_data(ttl=300, max_entries=10)
 def load_data(ticker, start, end):
     try:
+        # yfinance is picky about date types; normalize to YYYY-MM-DD strings.
         start_ts = pd.to_datetime(start)
         end_ts = pd.to_datetime(end)
+        # `yf.download` is generally more reliable than `Ticker().history`.
         raw_df = yf.download(
             ticker,
             start=start_ts.strftime("%Y-%m-%d"),
@@ -659,9 +685,13 @@ def load_data(ticker, start, end):
             auto_adjust=False,
             threads=False,
         )
+        # `yfinance` can sometimes return None on network/ticker errors.
         if raw_df is None:
             return pd.DataFrame()
+        # `yf.download` can return MultiIndex columns (e.g., ('Close','NVDA')).
+        # Flatten to standard OHLCV columns so the rest of the app works.
         if isinstance(raw_df.columns, pd.MultiIndex):
+            # Prefer the price field level (Open/High/Low/Close/Adj Close/Volume)
             raw_df.columns = raw_df.columns.get_level_values(0)
         return raw_df
     except Exception:
@@ -714,6 +744,7 @@ if page == "📥  Data Collection & Preprocessing":
     st.markdown("## 📥 Data Collection & Preprocessing")
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # KPI Row
     daily_return = df['Close'].pct_change().mean() * 100
     total_return = ((df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1) * 100
     volatility   = df['Close'].pct_change().std() * 100
@@ -727,6 +758,7 @@ if page == "📥  Data Collection & Preprocessing":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Data Preview & Stats side by side
     left, right = st.columns([1, 1])
     with left:
         st.markdown("###  Data Preview")
@@ -743,6 +775,7 @@ if page == "📥  Data Collection & Preprocessing":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Missing values
     st.markdown("### 🔍 Missing Values Present")
     null_df = df.isnull().sum().reset_index()
     null_df.columns = ["Column", "Missing Values"]
@@ -765,6 +798,7 @@ if page == "📥  Data Collection & Preprocessing":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Chart
     st.markdown("### 📈 Price Chart with Moving Averages")
     recent_days = st.slider("Trading days to display", 50, len(df), 252)
     recent_df   = df.tail(recent_days)
@@ -776,31 +810,38 @@ if page == "📥  Data Collection & Preprocessing":
                              name="MA 20", line=dict(color="#818cf8", width=1.5, dash="dot")))
     fig.add_trace(go.Scatter(x=recent_df.index, y=recent_df['MA_50'],
                              name="MA 50", line=dict(color="#f472b6", width=1.5, dash="dash")))
+
+    # ✅ Volume bars — light warm gray, no dark border
     fig.add_trace(go.Bar(x=recent_df.index, y=recent_df['Volume'],
                          name="Volume", yaxis="y2",
                          marker=dict(
-                             color='rgba(203, 189, 172, 0.35)',
-                             line=dict(color='rgba(0,0,0,0)', width=0)
+                             color='rgba(203, 189, 172, 0.35)',        # warm gray for cream bg
+                             line=dict(color='rgba(0,0,0,0)', width=0) # no dark border
                          ),
                          showlegend=True))
+
     fig.update_layout(
         **PLOTLY_LAYOUT,
         height=520,
         yaxis2=dict(overlaying="y", side="right", showgrid=False,
                     title="Volume", tickfont=dict(color="#475569")),
         title=dict(text=f"{ticker} — Price & Volume Overview",
-                   font=dict(family="Syne,sans-serif", size=16, color="#1e293b"))
+                   font=dict(family="Syne,sans-serif", size=16, color="#1e293b"))  # ✅ dark title
     )
+
+    # ✅ Legend — cream background, dark text
     fig.update_layout(legend=dict(
-        bgcolor="rgba(250, 247, 242, 0.90)",
+        bgcolor="rgba(250, 247, 242, 0.90)",        # cream
         bordercolor="rgba(56, 189, 248, 0.30)",
         borderwidth=1,
-        font=dict(color="#1e293b", size=13),
+        font=dict(color="#1e293b", size=13),        # dark text
         itemsizing="constant",
         orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5
     ))
+
     st.plotly_chart(fig, width='stretch')
 
+    # OHLC Candlestick
     st.markdown("### 🕯 Candlestick Chart (Last 90 Days)")
     candle_df = df.tail(90)
     fig_c = go.Figure(go.Candlestick(
@@ -824,9 +865,11 @@ elif page == "🧹  Data Cleaning & Linear Forecasting":
     st.markdown("## 🧹 Data Cleaning & Linear Forecasting")
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Fill MAs
     df['MA_20'] = df['MA_20'].fillna(df['Close'].expanding().mean())
     df['MA_50'] = df['MA_50'].fillna(df['Close'].expanding().mean())
 
+    # Outlier handling
     def rolling_zscore_smooth(series, window=30, threshold=3.0):
         min_p     = max(1, window // 2)
         roll_mean = series.rolling(window, min_periods=min_p).mean()
@@ -845,6 +888,7 @@ elif page == "🧹  Data Cleaning & Linear Forecasting":
     df["MA20_cleaned"],  ma20_out  = rolling_zscore_smooth(df["MA_20"])
     df["MA50_cleaned"],  ma50_out  = rolling_zscore_smooth(df["MA_50"])
 
+    # KPIs
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Missing Values", "0")
     c2.metric("Close Outliers Adjusted", close_out)
@@ -853,6 +897,7 @@ elif page == "🧹  Data Cleaning & Linear Forecasting":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Before / After comparison chart
     st.markdown("### 🔄 Before vs After Cleaning")
     fig_ba = make_subplots(rows=1, cols=2,
                            subplot_titles=("Close Price: Raw vs Cleaned", "Distribution Comparison"))
@@ -872,6 +917,7 @@ elif page == "🧹  Data Cleaning & Linear Forecasting":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # Linear Regression
     st.markdown("### 📉 Linear Regression Forecast")
 
     model_df = df.copy()
@@ -931,6 +977,7 @@ elif page == "🤖  Advanced Model Comparison":
     st.markdown("## 🤖 Advanced Model Comparison")
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # ── Feature Engineering ──
     df['MA_20'] = df['MA_20'].fillna(df['Close'].expanding().mean())
     df['MA_50'] = df['MA_50'].fillna(df['Close'].expanding().mean())
 
@@ -1046,6 +1093,7 @@ elif page == "🤖  Advanced Model Comparison":
     }
     best_test_pred = preds_map[best["Model"]]
 
+    # ── Best Model Banner ──
     st.markdown(f"### 🏆 Best Model: {best['Model']}")
     b1,b2,b3,b4,b5,b6 = st.columns(6)
     b1.metric("Model",    best["Model"])
@@ -1057,6 +1105,7 @@ elif page == "🤖  Advanced Model Comparison":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # ── Table + Bar chart ──
     left, right = st.columns([1, 1])
     with left:
         st.markdown("#### 📊 All Models Performance")
@@ -1084,12 +1133,16 @@ elif page == "🤖  Advanced Model Comparison":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    #st.markdown(f"#### 📈 Actual vs Predicted — {best['Model']} (Test Set)")
     fig_pred = go.Figure()
     test_idx = model_df.index[val_end:]
+
     fig_pred.add_trace(go.Scatter(x=test_idx, y=y_test.values,
-                              name="Actual", line=dict(color="#cbd5e1", width=2)))
+                              name="Actual", line=dict(color="#cbd5e1", width=2)))  # ← lighter
+
     fig_pred.add_trace(go.Scatter(x=test_idx, y=best_test_pred,
                               name="Predicted", line=dict(color="#38bdf8", width=2, dash="dash")))
+
     residuals = y_test.values - best_test_pred
     fig_pred.add_trace(go.Bar(x=test_idx, y=residuals,
                           name="Residuals", yaxis="y2",
@@ -1098,19 +1151,21 @@ elif page == "🤖  Advanced Model Comparison":
                                   'rgba(56, 189, 248, 0.20)' if v >= 0 else 'rgba(251, 113, 133, 0.20)'
                                   for v in residuals
                               ],
-                              line=dict(color='rgba(0,0,0,0)', width=0)
+                              line=dict(color='rgba(0,0,0,0)', width=0)  # ← no dark border
                           )))
+
     fig_pred.update_layout(
-        **PLOTLY_LAYOUT, height=460,
-        yaxis2=dict(overlaying="y", side="right", showgrid=False,
-                    title="Residuals", tickfont=dict(color="#9298d4")),
-        title=dict(text=f"{best['Model']} — Test Set Predictions + Residuals",
-                   font=dict(family="Syne,sans-serif", size=15, color="#1e293b"))
-    )
+    **PLOTLY_LAYOUT, height=460,
+    yaxis2=dict(overlaying="y", side="right", showgrid=False,
+                title="Residuals", tickfont=dict(color="#9298d4")),
+    title=dict(text=f"{best['Model']} — Test Set Predictions + Residuals",
+               font=dict(family="Syne,sans-serif", size=15, color="#1e293b"))  # ← dark title
+)
     st.plotly_chart(fig_pred, width='stretch')
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # ── 7-Day Forecast ──
     st.markdown("### 📅 7-Day Future Price Forecast")
 
     forecast_df_loop = output_df.copy()
@@ -1189,6 +1244,7 @@ elif page == "🤖  Advanced Model Comparison":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # ── Performance Report ──
     st.markdown("### 📋 Performance Report")
     r1, r2, r3 = st.columns(3)
     with r1:
@@ -1234,6 +1290,10 @@ elif page == "📊  Trend Analysis & Classification":
     from sklearn.preprocessing import StandardScaler
     from xgboost import XGBRegressor
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # CACHED FUNCTION — trains all models once, reuses on every re-render
+    # Cache key = ticker + dates, so retrains only when inputs change
+    # ─────────────────────────────────────────────────────────────────────────
     @st.cache_resource(show_spinner=False)
     def build_and_train(ticker, start_str, end_str):
         stock = yf.Ticker(ticker)
@@ -1295,6 +1355,7 @@ elif page == "📊  Trend Analysis & Classification":
         Xvl_s = sc.transform(Xvl)
         Xts_s = sc.transform(Xts)
 
+        # Regressors (reduced estimators for speed)
         lin     = LinearRegression().fit(Xtr_s, ytr)
         lin_p   = lin.predict(Xts_s)
 
@@ -1335,24 +1396,6 @@ elif page == "📊  Trend Analysis & Classification":
         gb_cp    = gb_clf.predict(Xts_s)
         gb_cacc  = accuracy_score(yc_ts, gb_cp) * 100
 
-        # ── SMOTE-fixed GB Classifier (runs in background, fixes class imbalance) ──
-        smote           = SMOTE(random_state=42)
-        Xtr_sm, yc_tr_sm = smote.fit_resample(Xtr_s, yc_tr)
-        cw              = compute_class_weight("balanced", classes=np.array([0,1]), y=np.array(yc_tr))
-        cw_dict         = {0: cw[0], 1: cw[1]}
-        gb_fixed        = GradientBoostingClassifier(n_estimators=200, learning_rate=0.05,
-                                                      max_depth=4, random_state=42)
-        gb_fixed.fit(Xtr_sm, yc_tr_sm)
-        gb_fixed_pred   = gb_fixed.predict(Xts_s)
-        gb_fixed_acc    = accuracy_score(yc_ts, gb_fixed_pred) * 100
-        gb_fixed_f1     = f1_score(yc_ts, gb_fixed_pred, average="macro") * 100
-        gb_fixed_f1_up  = f1_score(yc_ts, gb_fixed_pred, pos_label=1) * 100
-        gb_fixed_f1_dn  = f1_score(yc_ts, gb_fixed_pred, pos_label=0) * 100
-        smote_counts    = {"before_down": int((np.array(yc_tr) == 0).sum()),
-                           "before_up":   int((np.array(yc_tr) == 1).sum()),
-                           "after_down":  int((np.array(yc_tr_sm) == 0).sum()),
-                           "after_up":    int((np.array(yc_tr_sm) == 1).sum())}
-
         return dict(
             output_df=out, model_df=mdf, scaler=sc,
             feature_cols=fcols, train_end=train_end, val_end=val_end,
@@ -1363,16 +1406,13 @@ elif page == "📊  Trend Analysis & Classification":
             log_pred=log_p,  log_acc=log_acc,
             rf_clf_pred=rf_cp, rf_clf_acc=rf_cacc,
             gb_clf_pred=gb_cp, gb_clf_acc=gb_cacc,
-            # SMOTE fix results
-            gb_fixed_pred=gb_fixed_pred, gb_fixed_acc=gb_fixed_acc,
-            gb_fixed_f1=gb_fixed_f1, gb_fixed_f1_up=gb_fixed_f1_up,
-            gb_fixed_f1_dn=gb_fixed_f1_dn, smote_counts=smote_counts,
-            cw_dict=cw_dict,
         )
 
+    # ── Load (spinner shown only on first run) ────────────────────────────────
     with st.spinner("⚙️ Training models — "):
         C = build_and_train(ticker, str(start_date), str(end_date))
 
+    # ── Unpack all cached results ─────────────────────────────────────────────
     output_df     = C["output_df"]
     model_df      = C["model_df"]
     scaler        = C["scaler"]
@@ -1390,27 +1430,18 @@ elif page == "📊  Trend Analysis & Classification":
     log_test_pred    = C["log_pred"];    log_acc    = C["log_acc"]
     rf_clf_test_pred = C["rf_clf_pred"]; rf_clf_acc = C["rf_clf_acc"]
     gb_clf_test_pred = C["gb_clf_pred"]; gb_clf_acc = C["gb_clf_acc"]
-    # SMOTE fix results (computed in background)
-    gb_fixed_pred  = C["gb_fixed_pred"]
-    gb_fixed_acc   = C["gb_fixed_acc"]
-    gb_fixed_f1    = C["gb_fixed_f1"]
-    gb_fixed_f1_up = C["gb_fixed_f1_up"]
-    gb_fixed_f1_dn = C["gb_fixed_f1_dn"]
-    smote_counts   = C["smote_counts"]
-    cw_dict        = C["cw_dict"]
 
-    # ── Use gb_fixed_pred as the definitive best classifier prediction ──
-    # SMOTE-fixed GB is always used as the final classifier for display
-    # (fixes class imbalance silently in background)
+    # ── Best classifier ───────────────────────────────────────────────────────
     clf_map = {
-        "Logistic Regression": (log_acc,      log_test_pred),
-        "RF Classifier":       (rf_clf_acc,   rf_clf_test_pred),
-        "GB Classifier":       (gb_fixed_acc, gb_fixed_pred),   # ← uses fixed version
+        "Logistic Regression": (log_acc,    log_test_pred),
+        "RF Classifier":       (rf_clf_acc, rf_clf_test_pred),
+        "GB Classifier":       (gb_clf_acc, gb_clf_test_pred),
     }
     best_clf_name = max(clf_map, key=lambda k: clf_map[k][0])
     best_clf_acc  = clf_map[best_clf_name][0]
     best_clf_pred = clf_map[best_clf_name][1]
 
+    # ── Naive directional accuracy ────────────────────────────────────────────
     actual_prices_test = X_test["Close_cleaned"].values
     actual_trend_test  = (y_test.values > actual_prices_test).astype(int)
     lin_naive_acc = accuracy_score(actual_trend_test, (lin_test_pred  > actual_prices_test).astype(int)) * 100
@@ -1418,11 +1449,14 @@ elif page == "📊  Trend Analysis & Classification":
     gb_naive_acc  = accuracy_score(actual_trend_test, (gb_test_pred   > actual_prices_test).astype(int)) * 100
     xgb_naive_acc = accuracy_score(actual_trend_test, (xgb_test_pred  > actual_prices_test).astype(int)) * 100
 
-    # ── UI ────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # UI STARTS HERE
+    # ─────────────────────────────────────────────────────────────────────────
     st.markdown("## 📊 Trend Analysis & Classification")
     st.markdown('<p style="color:#64748b;font-size:0.88rem;margin-top:-10px;">Combines insights from all three milestones — cleaning, modeling, and advanced trend direction prediction</p>', unsafe_allow_html=True)
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
+    # ── KPI Row ──────────────────────────────────────────────────────────────
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Best Classifier",   best_clf_name)
     k2.metric("Directional Acc",   f"{best_clf_acc:.1f}%")
@@ -1432,7 +1466,7 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section A ─────────────────────────────────────────────────────────────
+    # ── Section A: Historical Trend Regions ──────────────────────────────────
     st.markdown("### 🟢 Historical Trend Regions")
     st.markdown('<div class="info-box">Green shading = Bullish period (MA10 &gt; MA50) &nbsp;|&nbsp; Red shading = Bearish period (MA10 &lt; MA50)</div>', unsafe_allow_html=True)
     st.markdown("")
@@ -1447,6 +1481,7 @@ elif page == "📊  Trend Analysis & Classification":
                                   name="MA10", line=dict(color="#38bdf8", width=1.2, dash="dot")))
     fig_hist.add_trace(go.Scatter(x=dates_plot, y=output_df["MA_50"],
                                   name="MA50", line=dict(color="#f472b6", width=1.2, dash="dash")))
+    # Group contiguous bull/bear runs — only ~10-20 vrects instead of ~1500
     region_start = dates_plot[0]
     region_bull  = bullish.iloc[0]
     for i in range(1, len(output_df)):
@@ -1465,7 +1500,7 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section B ─────────────────────────────────────────────────────────────
+    # ── Section B: RSI Chart ─────────────────────────────────────────────────
     st.markdown("### 📡 RSI Indicator")
     fig_rsi = go.Figure()
     fig_rsi.add_trace(go.Scatter(x=dates_plot, y=output_df["RSI"],
@@ -1489,14 +1524,14 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section C ─────────────────────────────────────────────────────────────
+    # ── Section C: Directional Accuracy Comparison ───────────────────────────
     st.markdown("### 🎯 Directional Accuracy Comparison")
 
     summary_data = {
         "Method":         ["LR (naive)","RF (naive)","GB (naive)","XGB (naive)",
                            "Logistic Clf","RF Classifier","GB Classifier"],
         "Accuracy (%)":   [lin_naive_acc, rf_naive_acc, gb_naive_acc, xgb_naive_acc,
-                           log_acc, rf_clf_acc, gb_fixed_acc],   # ← gb_fixed_acc used here
+                           log_acc, rf_clf_acc, gb_clf_acc],
         "Type":           ["Regressor→Trend"]*4 + ["Dedicated Classifier"]*3
     }
     summary_df = pd.DataFrame(summary_data).sort_values("Accuracy (%)", ascending=False).reset_index(drop=True)
@@ -1530,7 +1565,7 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section D ─────────────────────────────────────────────────────────────
+    # ── Section D: Test Set Trend Dots ───────────────────────────────────────
     st.markdown(f"### 🔵 Test Set Predictions — {best_clf_name}")
     test_idx  = model_df.index[val_end:]
     correct_m = best_clf_pred == y_cls_test.values
@@ -1562,7 +1597,7 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section E ─────────────────────────────────────────────────────────────
+    # ── Section E: 7-Day Forecast ────────────────────────────────────────────
     st.markdown("### 🚀 7-Day Forecast with Trend Direction")
 
     reg_acc_map = {
@@ -1585,6 +1620,7 @@ elif page == "📊  Trend Analysis & Classification":
         pred = best_reg_obj.predict(scaler.transform(feat_row))[0] if use_sc \
                else best_reg_obj.predict(feat_row)[0]
         future_prices.append(pred)
+
         nr = latest.copy()
         nr["Close_cleaned"] = pred
         nr["Lag3"] = latest["Lag2"]; nr["Lag2"] = latest["Lag1"]; nr["Lag1"] = pred
@@ -1647,11 +1683,9 @@ elif page == "📊  Trend Analysis & Classification":
 
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Section F: Classification Report (uses SMOTE-fixed GB predictions) ───
+    # ── Section F: Classification Report ─────────────────────────────────────
     st.markdown(f"### 📋 Classification Report — {best_clf_name}")
-
-    # Use gb_fixed_pred for the report to show balanced/correct results
-    report    = classification_report(y_cls_test, gb_fixed_pred,
+    report    = classification_report(y_cls_test, best_clf_pred,
                                       target_names=["Down","Up"],
                                       zero_division=0, output_dict=True)
     report_df = pd.DataFrame(report).transpose().round(3)
@@ -1675,8 +1709,8 @@ elif page == "📊  Trend Analysis & Classification":
                     <div style="color:#22c55e;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">{best_clf_acc:.2f}%</div>
                 </div>
                 <div style="background:rgba(129,140,248,0.08);border-radius:10px;padding:12px;">
-                    <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Improvement vs LR</div>
-                    <div style="color:#818cf8;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">{best_clf_acc - lin_naive_acc:.1f}%</div>
+                    <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Improvement</div>
+                    <div style="color:#818cf8;font-family:'JetBrains Mono',monospace;font-weight:600;margin-top:4px;">+{best_clf_acc - lin_naive_acc:.2f}% vs LR</div>
                 </div>
                 <div style="background:rgba(244,114,182,0.08);border-radius:10px;padding:12px;">
                     <div style="color:#64748b;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">7-Day Bias</div>
@@ -1687,10 +1721,3 @@ elif page == "📊  Trend Analysis & Classification":
             </div>
         </div>
         """, unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # ██  Section G — SMOTE fix runs silently in background (no display)
-    # All SMOTE/class-weight computation is done inside build_and_train() above.
-    # Results (gb_fixed_pred, gb_fixed_acc, gb_fixed_f1, etc.) are used
-    # directly in Section C accuracy table and Section F classification report.
-    # ══════════════════════════════════════════════════════════════════════════
